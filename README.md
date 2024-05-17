@@ -5,10 +5,16 @@ is here https://drive.google.com/drive/folders/1f-DPbcvOMFSfN61VTeiJiA_br67tZA6w
 
 # Code modifications:
 1. Vamshi kumar Reddy - Pointnet.py model add data_augment function
-line 186-208, all CUDE environment changes probably 35-55 lines,  overall around 50 lines.
-2. Srinik - Uptrans.py - Added batch normalization - changed around 50 lines
+line 186-208, all CUDA environment changes probably 35-55 lines,  overall around 50 lines.
+
+Key responsibilites - Set up the ODGNet architecture and data preprocessing pipeline.
+2. Srinik - Uptrans.py - Added batch normalization - changed around 50 lines, train.py in FS-SDF (Changed manual iteration to matrix style) - around 20 lines. Total overall 60-70 lines
+
+Key responsibilites - Set up the FS-SDF architecture and data preprocessing pipeline from ODGNet
 3. Amaan Kayum - Data Generation and Movement scripts. test_extra sh files. train_text_extract.py
 changes around 30-40 lines
+
+Key responsibilites - Set up the FS-SDF visualisation pipeline and computed results.
 
 
 # ODGNet
