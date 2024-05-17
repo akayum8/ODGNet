@@ -1,3 +1,16 @@
+# Pretrained Models
+Pretrained models at checkpoint 50 for ODGnet and checkpoint 43 for fssdf
+is here https://drive.google.com/drive/folders/1f-DPbcvOMFSfN61VTeiJiA_br67tZA6w?usp=sharing
+
+
+# Code modifications:
+1. Vamshi kumar Reddy - Pointnet.py model add data_augment function
+line 186-208, all CUDE environment changes probably 35-55 lines,  overall around 50 lines.
+2. Srinik - Uptrans.py - Added batch normalization - changed around 50 lines
+3. Amaan Kayum - Data Generation and Movement scripts. test_extra sh files. train_text_extract.py
+changes around 30-40 lines
+
+
 # ODGNet
 ## Requiremnets
 Create any venv and do below
