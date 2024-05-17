@@ -5,9 +5,8 @@ from functools import partial
 
 class ShapeNetPoints_sdf_encoder(nn.Module):
 
-    def __init__(self, device = torch.device('cuda')):
+    def __init__(self, device=torch.device('cuda')):
         super(ShapeNetPoints_sdf_encoder, self).__init__()
-        # 128**3 res input
 
         self.conv_in = nn.Conv3d(1, 16, 3, padding=1, padding_mode='zeros')
         self.conv_0 = nn.Conv3d(16, 32, 3, padding=1, padding_mode='zeros')
@@ -19,9 +18,7 @@ class ShapeNetPoints_sdf_encoder(nn.Module):
         self.conv_3 = nn.Conv3d(128, 128, 3, padding=1, padding_mode='zeros')
         self.conv_3_1 = nn.Conv3d(128, 128, 3, padding=1, padding_mode='zeros')
 
-        
         self.actvn = nn.ReLU()
-
         self.maxpool = nn.MaxPool3d(2)
 
         self.conv_in_bn = nn.BatchNorm3d(16)
@@ -30,65 +27,53 @@ class ShapeNetPoints_sdf_encoder(nn.Module):
         self.conv2_1_bn = nn.BatchNorm3d(128)
         self.conv3_1_bn = nn.BatchNorm3d(128)
 
-
         displacment = 0.0722
-        displacments = []
-        displacments.append([0, 0, 0])
-        for x in range(3):
-            for y in [-1, 1]:
-                input = [0, 0, 0]
-                input[x] = y * displacment
-                displacments.append(input)
+        self.displacements = torch.Tensor([[y * displacment if x == i else 0 for x in range(3)] for i in range(3)]).to(device)
 
-        self.displacments = torch.Tensor(displacments).to(device)
-        #self.reshape = Reshape()
-        #self.sampler = grid_sampler_.apply #partial(F.grid_sample, padding_mode='border', align_corners=True )#grid_sampler_.apply 
-        self.sampler = partial(F.grid_sample, padding_mode='border', align_corners=True )#grid_sampler_.apply 
-        #self.sampler =custom_grid_sample
-        #self.sampler =sample_features
+        self.sampler = partial(F.grid_sample, padding_mode='border', align_corners=True)
+
     def forward(self, p, x):
         x = x.unsqueeze(1)
-
         p_features = p.transpose(1, -1)
         p = p.unsqueeze(1).unsqueeze(1)
-        p = torch.cat([p + d for d in self.displacments], dim=2)  # (B,1,7,num_samples,3)
-        feature_0 = self.sampler(x, p)  # out : (B,C (of x), 1,1,sample_num)
+        p = torch.cat([p + d for d in self.displacements], dim=2)
 
-        net = self.actvn(self.conv_in(x))
+        net = self.conv_in(x)
         net = self.conv_in_bn(net)
-        feature_1 = self.sampler(net, p)  # out : (B,C (of x), 1,1,sample_num)
+        net = self.actvn(net)
+        feature_1 = self.sampler(net, p)
+
         net = self.maxpool(net)
 
-        net = self.actvn(self.conv_0(net))
-        net = self.actvn(self.conv_0_1(net))
+        net = self.conv_0(net)
         net = self.conv0_1_bn(net)
-        feature_2 = self.sampler(net, p)  # out : (B,C (of x), 1,1,sample_num)
+        net = self.actvn(net)
+        feature_2 = self.sampler(net, p)
+
         net = self.maxpool(net)
 
-        net = self.actvn(self.conv_1(net))
-        net = self.actvn(self.conv_1_1(net))
+        net = self.conv_1(net)
         net = self.conv1_1_bn(net)
-        feature_3 = self.sampler(net, p) # out : (B,C (of x), 1,1,sample_num)
+        net = self.actvn(net)
+        feature_3 = self.sampler(net, p)
+
         net = self.maxpool(net)
 
-        net = self.actvn(self.conv_2(net))
-        net = self.actvn(self.conv_2_1(net))
+        net = self.conv_2(net)
         net = self.conv2_1_bn(net)
+        net = self.actvn(net)
         feature_4 = self.sampler(net, p)
+
         net = self.maxpool(net)
 
-        net = self.actvn(self.conv_3(net))
-        net = self.actvn(self.conv_3_1(net))
+        net = self.conv_3(net)
         net = self.conv3_1_bn(net)
+        net = self.actvn(net)
         feature_5 = self.sampler(net, p)
-        # here every channel corresponds to one feature.
 
-        features = torch.cat((feature_0, feature_1, feature_2, feature_3, feature_4, feature_5),
-                             dim=1)  # (B, features, 1,7,sample_num)
+        features = torch.cat((feature_1, feature_2, feature_3, feature_4, feature_5), dim=1)
         shape = features.shape
-        features = torch.reshape(features,
-                                 (shape[0], shape[1] * shape[3], shape[4]))  # (B, featues_per_sample, samples_num)
-        #features = torch.cat((features, p_features), dim=1)  # (B, featue_size, samples_num)
+        features = torch.reshape(features, (shape[0], shape[1] * shape[3], shape[4]))
 
         return features
 class ShapeNetPoints_sdf_maml(nn.Module):
