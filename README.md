@@ -8,8 +8,10 @@ is here https://drive.google.com/drive/folders/1f-DPbcvOMFSfN61VTeiJiA_br67tZA6w
 line 186-208, all CUDE environment changes probably 35-55 lines,  overall around 50 lines.
 
 Setup the pipeline to ingest incomplete point clouds and output completed ones from ODGNet
+
 2. Srinik - Uptrans.py - Added batch normalization - changed around 50 lines
 Set up pipeline to preprocess data from ODGNet and ingest into FS-SDF. 
+
 3. Amaan Kayum - Data Generation and Movement scripts. test_extra sh files. train_text_extract.py
 changes around 30-40 lines
 Helped in integration of pipelines and modifying architectures
