@@ -13,97 +13,52 @@ from .build import MODELS
 
 
 class UNet(nn.Module):
-    def __init__(self, dim_feat=384, num_seeds = 1024, seed_fea=128, num_dicts=256):
-        '''
-        Extract information from partial point cloud
-        '''
+    def __init__(self, dim_feat=384, num_seeds=1024, seed_fea=128, num_dicts=256):
         super(UNet, self).__init__()
         self.num_seed = num_seeds
-        self.sa_module_1 = PointNet_SA_Module_KNN(num_seeds//2, 16, 3, [32, seed_fea], group_all=False, if_bn=False, if_idx=True)
+        self.sa_module_1 = PointNet_SA_Module_KNN(num_seeds // 2, 16, 3, [32, seed_fea], group_all=False, if_bn=True, if_idx=True)
         self.transformer_1 = Transformer(seed_fea, dim=64)
-        self.sa_module_2 = PointNet_SA_Module_KNN(num_seeds//8, 16, seed_fea, [128, 256], group_all=False, if_bn=False, if_idx=True)
+        self.sa_module_2 = PointNet_SA_Module_KNN(num_seeds // 8, 16, seed_fea, [128, 256], group_all=False, if_bn=True, if_idx=True)
         self.transformer_2 = Transformer(256, dim=64)
-        #self.sa_module_3 = PointNet_SA_Module_KNN(32, 16, 256, [256, 384], group_all=False, if_bn=False, if_idx=True)
-        #self.transformer_3 = Transformer(384, dim=64)
-        self.sa_module_4 = PointNet_SA_Module_KNN(None, None, 256, [384, dim_feat], group_all=True, if_bn=False)
-        
-        self.ps_0 = nn.ConvTranspose1d(dim_feat, 256, num_seeds//16, bias=True)
+        self.sa_module_4 = PointNet_SA_Module_KNN(None, None, 256, [384, dim_feat], group_all=True, if_bn=True)
+
+        self.ps_0 = nn.ConvTranspose1d(dim_feat, 256, num_seeds // 16, bias=True)
         self.mlp_1 = MLP_Res(in_dim=dim_feat + 256, hidden_dim=256, out_dim=256)
+        self.ps_1 = nn.ConvTranspose1d(256, 256, 2, 2, bias=True)
+        self.ps_2 = nn.ConvTranspose1d(256, 128, 2, 2, bias=True)
 
-        self.ps_1 = nn.ConvTranspose1d(256, 256, 2,2, bias=True)
-        self.ps_2 = nn.ConvTranspose1d(256, 128, 2,2, bias=True)
-        
+        self.refine_1 = FeaRefine(dim=256, hidd_dim=64, num_dicts=num_dicts)
+        self.refine_2 = FeaRefine(dim=128, hidd_dim=64, num_dicts=num_dicts // 2)
 
-        #self.refine_1 = nn.ModuleList([FeaRefine(dim=256,hidd_dim=64,num_dicts=num_dicts) for i in range(2)])
-        #self.refine_2 = nn.ModuleList([FeaRefine(dim=128,hidd_dim=64,num_dicts=num_dicts//2) for i in range(2)])
-
-        self.refine_1 = FeaRefine(dim=256,hidd_dim=64,num_dicts=num_dicts) 
-        self.refine_2 = FeaRefine(dim=128,hidd_dim=64,num_dicts=num_dicts//2)
-
-        #self.ps_3 = nn.ConvTranspose1d(64, 32, 2, bias=True)
-        #self.mlp_1 = MLP_Res(in_dim=dim_feat + 256, hidden_dim=256, out_dim=256)
-        #self.mlp_2 = MLP_Res(in_dim=dim_feat + 128, hidden_dim=128, out_dim=64)
         self.mlp_3 = MLP_Res(in_dim=seed_fea, hidden_dim=32, out_dim=3)
+        self.bn1 = nn.BatchNorm1d(seed_fea)
+        self.bn2 = nn.BatchNorm1d(256)
 
     def forward(self, point_cloud):
-        """
-        Args:
-             point_cloud: b, 3, n
-
-        Returns:
-            l3_points: (B, out_dim, 1)
-        """
-        
         l0_xyz = point_cloud
         l0_fea = point_cloud
 
         ## Encoder        
-        l1_xyz, l1_fea, idx1 = self.sa_module_1(l0_xyz, l0_fea)  # (B, 3, 512), (B, 128, 512)
-        l1_fea = self.transformer_1(l1_fea, l1_xyz)
-        l2_xyz, l2_fea, idx2 = self.sa_module_2(l1_xyz, l1_fea)  # (B, 3, 128), (B, 256, 128)
-        l2_fea = self.transformer_2(l2_fea, l2_xyz)
-        #l3_xyz, l3_points, idx3 = self.sa_module_3(l2_xyz, l2_points)  # (B, 3, 32), (B, 384, 32)
-        #l3_points = self.transformer_3(l3_points, l3_xyz)
-        l4_xyz, l4_fea = self.sa_module_4(l2_xyz, l2_fea)  # (B, 3, 1), (B, out_dim, 1)
-        
+        l1_xyz, l1_fea, idx1 = self.sa_module_1(l0_xyz, l0_fea)
+        l1_fea = self.bn1(self.transformer_1(l1_fea, l1_xyz))
+        l2_xyz, l2_fea, idx2 = self.sa_module_2(l1_xyz, l1_fea)
+        l2_fea = self.bn2(self.transformer_2(l2_fea, l2_xyz))
+        l4_xyz, l4_fea = self.sa_module_4(l2_xyz, l2_fea)
+
         ## Decoder
-        #seed generate 0
-        u0_fea = self.ps_0(l4_fea)  # (b, 256, 128)
-        u0_fea = self.mlp_1(torch.cat([u0_fea, l4_fea.repeat((1, 1, u0_fea.size(2)))], 1))
+        u0_fea = self.ps_0(l4_fea)
+        u0_fea = self.mlp_1(torch.cat([u0_fea, l4_fea.repeat(1, 1, u0_fea.size(2))], 1))
 
-        #upconv1
         u1_fea = self.ps_1(u0_fea)
-        #cons1 = []
-        #for i, blk in enumerate(self.refine_1):
-        u1_fea,cons1 = self.refine_1(u1_fea)
+        u1_fea, cons1 = self.refine_1(u1_fea)
+        u1_fea = torch.cat([l2_fea, u1_fea], dim=2)
 
-        #u1_fea = u1_fea+self.mlp_1(torch.cat([u1_fea, l4_fea.repeat((1, 1, u1_fea.size(2)))], 1)) # (b, 256, 128)
-        #u1_xyz = self.mlp_1(u1_fea)
-        
-        # skip concat
-        u1_fea = torch.cat([l2_fea,u1_fea],dim=2)  # (b, 256, 256)
-        #u1_xyz = torch.cat([l2_xyz,u1_xyz],dim=2)
-        
-        #upconv 2
-        u2_fea = self.ps_2(u1_fea)  # (b, 64, 512)
-        #cons2 = []
-        #for i, blk in enumerate(self.refine_2):
-        u2_fea,cons2 = self.refine_2(u2_fea)
-        #cons2.append(cons)
-        #u2_fea = self.mlp_2(torch.cat([u2_fea, l4_fea.repeat((1, 1, u2_fea.size(2)))], 1)) # (b, 64, 512)
-        #u2_xyz = self.mlp_2(u2_fea)
-        
-        # skip concat
-        #u2_fea = torch.cat([l1_fea,u2_fea],dim=2)  
+        u2_fea = self.ps_2(u1_fea)
+        u2_fea, cons2 = self.refine_2(u2_fea)
         u2_xyz = self.mlp_3(u2_fea)
-        
-        u2_xyz = torch.cat([l1_xyz,u2_xyz],dim=2) # (b, 3, 1024)
-        u2_fea = torch.cat([l1_fea,u2_fea],dim=2) # (b, 64, 1024)
+        u2_xyz = torch.cat([l1_xyz, u2_xyz], dim=2)
+        u2_fea = torch.cat([l1_fea, u2_fea], dim=2)
 
-        #upconv 3
-        #u3_fea = self.ps_3(u2_fea) # (b, 32, 2048)
-        #u3_xyz = self.mlp_3(u3_fea)
-        #print(u2_fea.size())
         return l4_fea, u2_xyz, u2_fea, cons1, cons2
 
 class FeaRefine(nn.Module):

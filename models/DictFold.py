@@ -154,7 +154,11 @@ class FeaRefine(nn.Module):
     def __init__(self, dim=512, hidd_dim=64, num_dicts=128):
         super(FeaRefine, self).__init__()
         self.num_dicts = num_dicts
+<<<<<<< Updated upstream
         self.dict_embed = nn.Parameter(torch.randn(dim, num_dicts))
+=======
+        self.dict_embed = nn.Parameter(torch.randn(dim, num_dicts))  # Changed from nn.Embedding to nn.Parameter
+>>>>>>> Stashed changes
         self.query = nn.Conv1d(dim, hidd_dim, 1)
         self.key = nn.Conv1d(dim, hidd_dim, 1)
     
@@ -187,53 +191,38 @@ class FeaRefine(nn.Module):
       
 class FeaRefine1(nn.Module):
     def __init__(self, dim=512, hidd_dim=64, num_dicts=128):
-        super(FeaRefine1, self).__init__()
+        super(FeaRefine, self).__init__()
         self.num_dicts = num_dicts
-        #self.merge = nn.Conv1d(dim+dim, dim, 1,bias=False)
+        self.dict_embed = nn.Parameter(torch.randn(dim, num_dicts))  # Changed from nn.Embedding to nn.Parameter
         self.query = nn.Conv1d(dim, hidd_dim, 1)
         self.key = nn.Conv1d(dim, hidd_dim, 1)
-        #self.value = nn.Conv1d(512+dim, dim, 1)
     
-    def forward(self, feat,dict_embed,global_fea):
+    def forward(self, feat, surge=True):
         """
         Args:
-            feat: Tensor (b, dim_feat, 1)
+            feat: Tensor (b, dim_feat, N)
         """
-        B = feat.size(0)
-        C,N = dict_embed.weight.size()
-        #print(feat.size())
-        dict_fea = dict_embed.weight.unsqueeze(0).repeat(B,1,1) # (1, dim, 128)
-        #value = self.value(torch.cat([global_fea.repeat(1,1,N),dict_fea],dim=1))
-        #shape_code = coarse_shapecode.repeat(1,1,128)
-        #cons = dict_fea.transpose(0,1) @ dict_fea
-        #Iden = torch.eye(self.num_dict,device='cuda')
+        B, C, N = feat.size()
+        dict_fea = self.dict_embed  # (dim, num_dicts)
+        feature_memory = torch.nn.functional.normalize(dict_fea, dim=0)
+        cons = feature_memory.transpose(0, 1) @ feature_memory
 
-        #value = value.repeat(B,1,1)
+        dict_fea = dict_fea.unsqueeze(0).repeat(B, 1, 1)
         
         q = self.query(feat)  # (b, 64, N)
-        #query_embed.unsqueeze(0) # (1, 512, num_dicts)
-        value = dict_fea #self.merge(torch.cat([shape_code,dict_fea],dim=1)) # (1, dim, 128)
-        k = self.key(value) # (1, 64, 128)
+        value = dict_fea
+        k = self.key(value)  # (b, 64, num_dicts)
         
         d_k = k.size(1)
-        # print(agg.size())
-        # qk_rel = q - k
-        # w = self.weight_mlp(qk_rel)
-        # w = torch.softmax(w, -1)
+        scores = torch.matmul(q.transpose(-2, -1), k) / math.sqrt(d_k)  # (b, N, num_dicts)
+        scores = torch.softmax(scores, dim=-1)  # (b, N, num_dicts)
         
-        # Attention
-        scores = torch.matmul(q.transpose(-2, -1), k) / math.sqrt(d_k) # (b, N, 128)
-        scores = torch.softmax(scores, dim=-1) # (b, N, 128)
-        
-        output = torch.matmul(scores, value.transpose(-2, -1)) # (b, N, dim)
-        output = self.merge(torch.cat([output.transpose(-2, -1),feat],dim=1))
+        output = torch.matmul(scores, value.transpose(-2, -1))  # (b, N, dim)
+        surg = (output.transpose(-2, -1) + feat) / 2
 
-        return output
-        #return (output.transpose(-2, -1)+feat)/2
-    
-        #print(att.size())
-        # agg = torch.sum(dict_feats*w,dim=2,keepdim=True)  # b, dim, n
-        # return agg,w
+        if surge:
+            surg = dict_fea
+        return surg, scores
 
 
 class FoldingNet(nn.Module):
