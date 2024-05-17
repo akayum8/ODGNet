@@ -1,10 +1,10 @@
 import os
 
 # Categories to keep
-categories_to_keep = ["02691156", "02828884"]
+categories_to_keep = ["02933112", "03636649"]
 dir_path = "/root/ODGNet/data/ShapeNet55-34/ShapeNet-55"
 # Open the text file for reading
-with open(f"{dir_path}/test_copy.txt", "r") as file:
+with open(f"{dir_path}/test_old.txt", "r") as file:
     lines = file.readlines()
 
 # Open a temporary file for writing
@@ -18,7 +18,7 @@ with open("temp_file.txt", "w") as temp_file:
             temp_file.write(line)
 
 # Open the input file for writing (this will overwrite the file)
-with open(f"{dir_path}/test_copy.txt", "w") as file:
+with open(f"{dir_path}/test.txt", "w") as file:
     with open("temp_file.txt", "r") as temp_file:
         file.writelines(temp_file.readlines())
 
