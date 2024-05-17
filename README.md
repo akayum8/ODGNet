@@ -1,42 +1,130 @@
 # ODGNet
-Orthogonal Dictionary Guided Shape Completion Network for Point Cloud
+## Requiremnets
+Create any venv and do below
+```
+pip install -r requirements.txt
+```
 
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/orthogonal-dictionary-guided-shape-completion/point-cloud-completion-on-shapenet)](https://paperswithcode.com/sota/point-cloud-completion-on-shapenet?p=orthogonal-dictionary-guided-shape-completion)
-
-# Environment
-
-Pytorch 1.12.0 with Nvidia GPUs
-
+## Install extensions 
 Setup Libs
-
 Install pointnet2_ops_lib and Chamfer Distance in the extension Folder:
+python3 setup.py install (in both folders)
 
-python3 setup.py install
+## Data Set Download
+use "sh script.sh" to download into the "/root/ODGNet/data.zip" folder. assuming pwd as "/root/ODGNet"
+After download, unzip the files into a new folder data/ShapeNet55-34/shapenet_pc such that shapenet_pc folder will contain the preprocessed shapenet dataset
 
-
-# Dataset and Python Libs Requirements
-Please Check PoinTr (https://github.com/yuxumin/PoinTr/tree/master)
-
-# Pretrained Models
-
-[[Google Drive](https://drive.google.com/file/d/1kfjvgIwJQn5p3MoUpyHEeyBfP7Lm5ePy/view?usp=sharing)]
-
-# Training/Testing
-Please check the bash files, e.g., "sh utrain.sh" for the PCN dataset.
-
-Check and modify the "test.sh" for testing.
-
-# Citation
-If our method and results are useful for your research, please consider citing:
+Create data/ShapeNet55-34/shapenet_subset as a sibling to shapenet_pc
 
 ```
-@inproceedings{ODGNet,
-    title={Orthogonal Dictionary Guided Shape Completion Network for Point Cloud},
-    author={Pingping Cai, Deja Scott, Xiaoguang Li, Song Wang},
-    booktitle={AAAI},
-    year={2024},
-}
+python test_text_extract.py
+python train_text_extract.py
 ```
 
-# Acknowledgement
-Some codes are borrowed from PoinTr and PSCU [https://github.com/corecai163/PSCU]
+The above python files will copy the selected subcatogories into the shapenet_subset which is used for training and testing
+
+## Training/Testing
+Please check the bash files, e.g., "sh train_55.sh" for the shapenet dataset.
+
+"sh test.sh" for testing with the model localtion.
+model placed at the location : experiments/UpTrans/ShapeNet55_models/shape55_upTransb1/ckpt-epoch-050.pth
+
+# FSSDF Code
+Create a conda environment as detailed in the readme of IFNet folder in fssdf code
+
+FSSDF uses IFNet data preprocessing to generate the data. Now we move to the IfNet folder
+and download and create the data for preprocessing.
+
+## Install
+```
+conda env create -f if-net_env.yml
+conda activate if-net
+```
+
+Install the needed libraries with:
+```
+cd data_processing/libmesh/
+python setup.py build_ext --inplace
+cd ../libvoxelize/
+python setup.py build_ext --inplace
+cd ../..
+```
+
+## Data Preparation
+
+The processing will take atleast 1-2Hrs and the the data will explode to approx 90GB 
+Download the [ShapeNet](https://www.shapenet.org/) data preprocessed by [Xu et. al. NeurIPS'19] from [here](https://drive.google.com/drive/folders/1QGhDW335L7ra31uw5U-0V7hB-viA0JXr)
+into the `shapenet` folder.
+
+Now extract the files into `shapenet\data` with: (for cabinet and lamp)
+
+```
+ls shapenet/02933112.tar.gz |xargs -n1 -i tar -xf {} -C shapenet/data/
+ls shapenet/03636649.tar.gz |xargs -n1 -i tar -xf {} -C shapenet/data/
+```
+The above downloads will be 3-4GB
+
+Next, the inputs and training point samples for IF-Nets are created. 
+
+First, the data is converted to the .off-format and scaled using
+```
+python data_processing/convert_to_scaled_off.py
+```
+
+The input data for Voxel Super-Resolution of voxels is created with
+```
+python data_processing/voxelize.py -res 32
+```
+using `-res 32` for 32<sup>3</sup> and `-res 128` for 128<sup>3</sup> resolution.
+
+The input data for Point Cloud Completion is created with
+```
+python data_processing/voxelized_pointcloud_sampling.py -res 128 -num_points 300
+```
+using `-num_points 300` for point clouds with 300 points and `-num_points 3000` for 3000 points.
+
+
+
+To generate ground truth Signed distance values instead of occupancies run:
+```
+python data_processing/boundary_sampling_sdf.py -sigma 0.1
+python data_processing/boundary_sampling_sdf.py -sigma 0.01
+```
+## Training
+ To start a training please run  the following command:
+ ````
+ python train.py -res 128 -pc_samples 3000 -epochs 100 -inner_steps 5 -batch_size 8
+
+````
+  You can add the following  options `-p_enc` and `_p_dec` to initialize the encoder and/or the decoder with a pretrained model. Also, you can freeze the encoder during the training by adding the option  `-freeze` to your command. 
+
+## Generation
+
+The command:
+
+````
+python generate.py -res 128 -pc_samples 3000 -batch_size 8 -inner_steps 5 -exp <exp_name> -checkpoint <checkpoint>  
+````
+Where `exp_name` is the path to the folder containing the trained model checkpoints.
+
+## Evaluation
+Please run
+
+```
+python data_processing/evaluate.py -reconst -generation_path experiments/iVoxels_dist-0.5_0.5_sigmas-0.1_0.01_v32_mShapeNet32Vox/evaluation_10_@256/generation/
+```
+to evaluate each reconstruction, where `-generation_path` is the path to the reconstructed objects generated in the previous step.
+> The above evaluation script can be run on multiple machines in parallel in order to increase generation speed significantly.
+
+Then run
+```
+python data_processing/evaluate.py -voxels -res 32
+```
+ to evaluate the quality of the input. For voxel girds use '-voxels' with '-res' to specify the input resolution and for point clouds use '-pc' with '-points' to specify the number of points.
+
+The quantitative evaluation of all reconstructions and inputs are gathered and put into `experiment/YOUR_EXPERIMENT/evaluation_CHECKPOINT_@256` using
+
+```
+python data_processing/evaluate_gather.py -voxel_input -res 32 -generation_path experiments/iVoxels_dist-0.5_0.5_sigmas-0.1_0.01_v32_mShapeNet32Vox/evaluation_10_@256/generation/
+```
+where you should use `-voxel_input` for Voxel Super-Resolution experiments, with `-res` specifying the input resolution or `-pc_input` for Point Cloud Completion, with `-points` specifying the number of points used.

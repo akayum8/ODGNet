@@ -1,0 +1,17 @@
+__pycache__/
+test.py 
+demo.ipynb
+.ipynb_checkpoints
+gen_dir
+if-net/data_down/
+__pycache__
+*.so
+build/
+*.pyc
+*.c
+if-net/experiments/*
+if-net/shapenet/data/*
+*.cpp
+/trash/
+!.gitkeep
+data_down/
